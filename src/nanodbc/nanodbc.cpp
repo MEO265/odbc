@@ -932,7 +932,7 @@ public:
         }
     }
 
-    connection_impl(string const& connection_string, std::list<attribute> attributes)
+    connection_impl(const string_type& connection_string, std::list<attribute> attributes)
         : env_(nullptr)
         , dbc_(nullptr)
         , connected_(false)
@@ -1116,7 +1116,7 @@ public:
     }
 
     RETCODE
-    connect(string const& connection_string, long timeout, void* event_handle = nullptr)
+    connect(const string_type& connection_string, long timeout, void* event_handle = nullptr)
     {
         std::list<attribute> attributes;
         // Avoid to set the timeout to 0 (no timeout).
@@ -5292,8 +5292,10 @@ void table_valued_parameter::close()
     template void table_valued_parameter::bind_strings(                                            \
         short, type::value_type const*, std::size_t, std::size_t, bool const*)
 // The following are the only supported instantiations of statement::bind().
-NANODBC_INSTANTIATE_TVP_BINDS(std::string::value_type);
+NANODBC_INSTANTIATE_TVP_BINDS(string_type::value_type);
+#if !defined(NANODBC_USE_UNICODE)
 NANODBC_INSTANTIATE_TVP_BINDS(wide_string_type::value_type);
+#endif
 NANODBC_INSTANTIATE_TVP_BINDS(short);
 NANODBC_INSTANTIATE_TVP_BINDS(unsigned short);
 NANODBC_INSTANTIATE_TVP_BINDS(int);
@@ -5308,8 +5310,10 @@ NANODBC_INSTANTIATE_TVP_BINDS(date);
 NANODBC_INSTANTIATE_TVP_BINDS(time);
 NANODBC_INSTANTIATE_TVP_BINDS(timestamp);
 
-NANODBC_INSTANTIATE_TVP_BIND_STRINGS(std::string);
+NANODBC_INSTANTIATE_TVP_BIND_STRINGS(string_type);
+#if !defined(NANODBC_USE_UNICODE)
 NANODBC_INSTANTIATE_TVP_BIND_STRINGS(wide_string_type);
+#endif
 //package:odbc
 NANODBC_INSTANTIATE_TVP_BIND_VECTOR_STRINGS(string_type);
 
@@ -6079,7 +6083,7 @@ bool result::is_bound(short column) const
     return impl_->is_bound(column);
 }
 
-bool result::is_bound(const string& column_name) const
+bool result::is_bound(const string_type& column_name) const
 {
     return impl_->is_bound(column_name);
 }
