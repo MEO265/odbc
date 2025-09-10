@@ -66,11 +66,12 @@ void odbc_result::execute() {
   try {
     c_->set_current_result(this);
     s_ = std::make_shared<nanodbc::statement>();
-    if (!this->immediate_) s_->prepare(*c_->connection(), sql_);
+    auto sql = utils::utf8_to_nanodbc(sql_);
+    if (!this->immediate_) s_->prepare(*c_->connection(), sql);
     if (this->immediate_ || (s_->parameters() == 0)) {
       bound_ = true;
       r_ = std::make_shared<nanodbc::result>(
-          this->immediate_ ? s_->execute_direct(*c_->connection(), sql_) :
+          this->immediate_ ? s_->execute_direct(*c_->connection(), sql) :
           s_->execute());
       num_columns_ = r_->columns();
     }
@@ -353,8 +354,8 @@ void odbc_result::bind_string(
     if (value == NA_STRING) {
       buffers.nulls_[column][i] = true;
     }
-    const char* v = CHAR(value);
-    buffers.strings_[column].push_back(v);
+    const char* v = Rf_translateCharUTF8(value);
+    buffers.strings_[column].push_back(utils::utf8_to_nanodbc(std::string(v)));
   }
 
   obj.bind_strings(
@@ -512,10 +513,9 @@ std::vector<std::string> odbc_result::column_names(nanodbc::result const& r) {
   names.reserve(num_columns_);
   for (short i = 0; i < num_columns_; ++i) {
     nanodbc::string_type name = r.column_name(i);
-    // Similar to the handling of string fields,
-    // convert to UTF-8 before returning to user ( if needed )
+    std::string utf8 = utils::nanodbc_to_utf8(name);
     names.push_back(
-        column_name_encoder_->makeString(name.c_str(), name.c_str() + name.length())
+        column_name_encoder_->makeString(utf8.c_str(), utf8.c_str() + utf8.size())
     );
   }
   return names;
@@ -781,7 +781,7 @@ std::vector<r_type> odbc_result::column_types(nanodbc::result const& r) {
         break;
       default:
         types.push_back(string_t);
-        signal_unknown_field_type(type, r.column_name(i));
+        signal_unknown_field_type(type, utils::nanodbc_to_utf8(r.column_name(i)));
         break;
       }
       break;
@@ -820,7 +820,7 @@ std::vector<r_type> odbc_result::column_types(nanodbc::result const& r) {
       break;
     default:
       types.push_back(string_t);
-      signal_unknown_field_type(type, r.column_name(i));
+      signal_unknown_field_type(type, utils::nanodbc_to_utf8(r.column_name(i)));
       break;
     }
   }
@@ -898,7 +898,7 @@ Rcpp::List odbc_result::result_to_dataframe(nanodbc::result& r, int n_max) {
         assign_raw(out, row, col, r);
         break;
       default:
-        signal_unknown_field_type(types[col], r.column_name(col));
+        signal_unknown_field_type(types[col], utils::nanodbc_to_utf8(r.column_name(col)));
         break;
       } // switch (types[col])
     } // for (size_t col = 0,... )

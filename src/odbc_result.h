@@ -43,7 +43,7 @@ private:
 class odbc_result {
 public:
   struct param_data {
-    std::map<short, std::vector<std::string>> strings_;
+    std::map<short, std::vector<nanodbc::string_type>> strings_;
     std::map<short, std::vector<std::vector<uint8_t>>> raws_;
     std::map<short, std::vector<nanodbc::time>> times_;
     std::map<short, std::vector<nanodbc::timestamp>> timestamps_;
