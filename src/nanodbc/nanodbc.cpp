@@ -595,6 +595,12 @@ struct sql_ctype<uint8_t>
     static const SQLSMALLINT value = SQL_C_BINARY;
 };
 
+template <>
+struct sql_ctype<char>
+{
+    static const SQLSMALLINT value = SQL_C_CHAR;
+};
+
 template <typename T>
 struct sql_ctype<
     T,
