@@ -61,6 +61,8 @@ Addressed a compiler warning on `r-devel-linux-x86_64-fedora-clang` (#941).
 * `dbConnect()` displays clear errors when unixODBC isn't found on macOS and
   Linux (@simonpcouch, #782).
 
+* `dbConnect()` adds `name_encoding` to complement `encoding` for separate
+  column content and name encoding (#845).
   
 * `dbListTables()` and `dbExistsTable()` improve temp table support with DB2 (#823).
 

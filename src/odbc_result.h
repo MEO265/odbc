@@ -82,6 +82,7 @@ private:
   bool bound_;
   bool immediate_;
   std::shared_ptr<Iconv> output_encoder_;
+  std::shared_ptr<Iconv> column_name_encoder_;
 
   param_data buffers_;
   std::map<short, param_data> tvp_buffers_;

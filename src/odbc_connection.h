@@ -26,6 +26,7 @@ public:
       std::string const& timezone = "UTC",
       std::string const& timezone_out = "UTC",
       std::string const& encoding = "",
+      std::string const& name_encoding = "",
       bigint_map_t const& bigint_mapping = i64_to_integer64,
       long const& timeout = 0,
       Rcpp::Nullable<Rcpp::List> const& r_attributes = R_NilValue,
@@ -48,6 +49,7 @@ public:
   cctz::time_zone timezone() const;
   std::string timezone_out_str() const;
   const std::shared_ptr<Iconv> output_encoder() const;
+  const std::shared_ptr<Iconv> column_name_encoder() const;
 
   bigint_map_t get_bigint_mapping() const;
 
@@ -60,6 +62,7 @@ private:
   std::string timezone_out_str_;
   bigint_map_t bigint_mapping_;
   std::shared_ptr<Iconv> output_encoder_;
+  std::shared_ptr<Iconv> column_name_encoder_;
   bool interruptible_execution_;
 };
 } // namespace odbc
