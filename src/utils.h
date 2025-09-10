@@ -15,21 +15,17 @@ namespace odbc {
 namespace utils {
 
   inline nanodbc::string_type utf8_to_nanodbc(const std::string& s) {
-#ifdef NANODBC_USE_UNICODE
-    std::wstring_convert<NANODBC_CODECVT_TYPE<nanodbc::wide_char_t>, nanodbc::wide_char_t> cvt;
+    std::wstring_convert<
+        NANODBC_CODECVT_TYPE<nanodbc::wide_char_t>, nanodbc::wide_char_t>
+        cvt;
     return cvt.from_bytes(s);
-#else
-    return s;
-#endif
   }
 
   inline std::string nanodbc_to_utf8(const nanodbc::string_type& s) {
-#ifdef NANODBC_USE_UNICODE
-    std::wstring_convert<NANODBC_CODECVT_TYPE<nanodbc::wide_char_t>, nanodbc::wide_char_t> cvt;
+    std::wstring_convert<
+        NANODBC_CODECVT_TYPE<nanodbc::wide_char_t>, nanodbc::wide_char_t>
+        cvt;
     return cvt.to_bytes(s);
-#else
-    return s;
-#endif
   }
   /// \brief Prepare connection attributes
   ///
