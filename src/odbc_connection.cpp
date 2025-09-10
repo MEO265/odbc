@@ -114,10 +114,12 @@ bool odbc_connection::get_data_any_order() const {
      * use empirical findings - we know this to be the case for the Microsoft
      * driver for SQL Server.
      */
-    std::string dbms = c_->get_info<std::string>(SQL_DBMS_NAME);
-    std::string driver = c_->get_info<std::string>(SQL_DRIVER_NAME);
+    auto dbms = utils::nanodbc_to_utf8(
+        c_->get_info<nanodbc::string_type>(SQL_DBMS_NAME));
+    auto driver = utils::nanodbc_to_utf8(
+        c_->get_info<nanodbc::string_type>(SQL_DRIVER_NAME));
     if (dbms == "Microsoft SQL Server" &&
-		    driver.find("msodbcsql") != std::string::npos) {
+                    driver.find("msodbcsql") != std::string::npos) {
       return false;
     }
     return true;

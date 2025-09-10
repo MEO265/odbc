@@ -967,12 +967,9 @@ void odbc_result::assign_string(
   if (value.is_null(column)) {
     res = NA_STRING;
   } else {
-    auto str = value.get<std::string>(column);
-    if (value.is_null(column)) {
-      res = NA_STRING;
-    } else {
-      res = output_encoder_->makeSEXP(str.c_str(), str.c_str() + str.length());
-    }
+    auto str = utils::nanodbc_to_utf8(
+        value.get<nanodbc::string_type>(column));
+    res = Rf_mkCharCE(str.c_str(), CE_UTF8);
   }
   SET_STRING_ELT(out[column], row, res);
 }
@@ -986,12 +983,9 @@ void odbc_result::assign_ustring(
   if (value.is_null(column)) {
     res = NA_STRING;
   } else {
-    auto str = value.get<std::string>(column);
-    if (value.is_null(column)) {
-      res = NA_STRING;
-    } else {
-      res = Rf_mkCharCE(str.c_str(), CE_UTF8);
-    }
+    auto str = utils::nanodbc_to_utf8(
+        value.get<nanodbc::string_type>(column));
+    res = Rf_mkCharCE(str.c_str(), CE_UTF8);
   }
   SET_STRING_ELT(out[column], row, res);
 }
