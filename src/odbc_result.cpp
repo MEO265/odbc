@@ -33,8 +33,7 @@ odbc_result::odbc_result(
       complete_(0),
       bound_(false),
       immediate_(immediate),
-      output_encoder_(c->output_encoder()),
-      column_name_encoder_(c->column_name_encoder()) {
+      output_encoder_(c->output_encoder()) {
 
   c_->cancel_current_result();
 
@@ -512,11 +511,7 @@ std::vector<std::string> odbc_result::column_names(nanodbc::result const& r) {
   std::vector<std::string> names;
   names.reserve(num_columns_);
   for (short i = 0; i < num_columns_; ++i) {
-    nanodbc::string_type name = r.column_name(i);
-    std::string utf8 = utils::nanodbc_to_utf8(name);
-    names.push_back(
-        column_name_encoder_->makeString(utf8.c_str(), utf8.c_str() + utf8.size())
-    );
+    names.push_back(utils::nanodbc_to_utf8(r.column_name(i)));
   }
   return names;
 }
