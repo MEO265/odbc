@@ -43,7 +43,7 @@ private:
 class odbc_result {
 public:
   struct param_data {
-    std::map<short, std::vector<std::string>> strings_;
+    std::map<short, std::vector<nanodbc::string_type>> strings_;
     std::map<short, std::vector<std::vector<uint8_t>>> raws_;
     std::map<short, std::vector<nanodbc::time>> times_;
     std::map<short, std::vector<nanodbc::timestamp>> timestamps_;
@@ -82,7 +82,6 @@ private:
   bool bound_;
   bool immediate_;
   std::shared_ptr<Iconv> output_encoder_;
-  std::shared_ptr<Iconv> column_name_encoder_;
 
   param_data buffers_;
   std::map<short, param_data> tvp_buffers_;

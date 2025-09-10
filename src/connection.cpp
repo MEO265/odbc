@@ -3,6 +3,7 @@
 #include "nanodbc.h"
 #include "odbc_types.h"
 #include "r_types.h"
+#include "utils.h"
 
 using namespace odbc;
 
@@ -13,14 +14,14 @@ Rcpp::DataFrame list_drivers_() {
   std::vector<std::string> values;
   for (auto& driver : nanodbc::list_drivers()) {
     if (driver.attributes.size() == 0) {
-      names.push_back(driver.name);
+      names.push_back(utils::nanodbc_to_utf8(driver.name));
       attributes.push_back("");
       values.push_back("");
     } else {
       for (auto& attr : driver.attributes) {
-        names.push_back(driver.name);
-        attributes.push_back(attr.keyword);
-        values.push_back(attr.value);
+        names.push_back(utils::nanodbc_to_utf8(driver.name));
+        attributes.push_back(utils::nanodbc_to_utf8(attr.keyword));
+        values.push_back(utils::nanodbc_to_utf8(attr.value));
       }
     }
   }
@@ -36,8 +37,8 @@ Rcpp::DataFrame list_data_sources_() {
   std::vector<std::string> names;
   std::vector<std::string> descriptions;
   for (auto& data_source : nanodbc::list_data_sources()) {
-    names.push_back(data_source.name);
-    descriptions.push_back(data_source.description);
+    names.push_back(utils::nanodbc_to_utf8(data_source.name));
+    descriptions.push_back(utils::nanodbc_to_utf8(data_source.description));
   }
   return Rcpp::DataFrame::create(
       Rcpp::_["name"] = names,
@@ -71,7 +72,8 @@ connection_ptr odbc_connect(
 
 std::string get_info_or_empty(connection_ptr const& p, short type) {
   try {
-    return (*p)->connection()->get_info<std::string>(type);
+    auto info = (*p)->connection()->get_info<nanodbc::string_type>(type);
+    return utils::nanodbc_to_utf8(info);
   } catch (const nanodbc::database_error& c) {
     return "";
   }
@@ -154,12 +156,20 @@ Rcpp::DataFrame connection_sql_tables(
     SEXP table_name = R_NilValue,
     SEXP table_type = R_NilValue) {
   auto c = nanodbc::catalog(*(*p)->connection());
+  nanodbc::string_type table_s, type_s, schema_s, catalog_s;
+  if (table_name != R_NilValue)
+    table_s = utils::utf8_to_nanodbc(Rcpp::as<std::string>(table_name));
+  if (table_type != R_NilValue)
+    type_s = utils::utf8_to_nanodbc(Rcpp::as<std::string>(table_type));
+  if (schema_name != R_NilValue)
+    schema_s = utils::utf8_to_nanodbc(Rcpp::as<std::string>(schema_name));
+  if (catalog_name != R_NilValue)
+    catalog_s = utils::utf8_to_nanodbc(Rcpp::as<std::string>(catalog_name));
   nanodbc::catalog::tables tables = nanodbc::catalog::tables(c.find_tables(
-      table_name == R_NilValue ? nullptr : Rcpp::as<const char*>(table_name),
-      table_type == R_NilValue ? nullptr : Rcpp::as<const char*>(table_type),
-      schema_name == R_NilValue ? nullptr : Rcpp::as<const char*>(schema_name),
-      catalog_name == R_NilValue ? nullptr
-                                 : Rcpp::as<const char*>(catalog_name)));
+      table_name == R_NilValue ? nullptr : table_s.c_str(),
+      table_type == R_NilValue ? nullptr : type_s.c_str(),
+      schema_name == R_NilValue ? nullptr : schema_s.c_str(),
+      catalog_name == R_NilValue ? nullptr : catalog_s.c_str()));
   std::vector<std::string> names;
   std::vector<std::string> types;
   std::vector<std::string> schemas;
@@ -167,11 +177,11 @@ Rcpp::DataFrame connection_sql_tables(
   std::vector<std::string> catalog;
 
   while (tables.next()) {
-    names.push_back(tables.table_name());
-    types.push_back(tables.table_type());
-    schemas.push_back(tables.table_schema());
-    remarks.push_back(tables.table_remarks());
-    catalog.push_back(tables.table_catalog());
+    names.push_back(utils::nanodbc_to_utf8(tables.table_name()));
+    types.push_back(utils::nanodbc_to_utf8(tables.table_type()));
+    schemas.push_back(utils::nanodbc_to_utf8(tables.table_schema()));
+    remarks.push_back(utils::nanodbc_to_utf8(tables.table_remarks()));
+    catalog.push_back(utils::nanodbc_to_utf8(tables.table_catalog()));
   }
   return Rcpp::DataFrame::create(
       Rcpp::_["table_catalog"] = catalog,
@@ -190,7 +200,7 @@ Rcpp::StringVector connection_sql_catalogs(
   Rcpp::StringVector ret;
   for ( const auto& val : res )
   {
-    ret.push_back( val );
+    ret.push_back( utils::nanodbc_to_utf8(val) );
   }
 
   return ret;
@@ -204,7 +214,7 @@ Rcpp::StringVector connection_sql_schemas(
   Rcpp::StringVector ret;
   for ( const auto& val : res )
   {
-    ret.push_back( val );
+    ret.push_back( utils::nanodbc_to_utf8(val) );
   }
 
   return ret;
@@ -218,7 +228,7 @@ Rcpp::StringVector connection_sql_table_types(
   Rcpp::StringVector ret;
   for ( const auto& val : res )
   {
-    ret.push_back( val );
+    ret.push_back( utils::nanodbc_to_utf8(val) );
   }
 
   return ret;
@@ -233,12 +243,20 @@ Rcpp::DataFrame connection_sql_columns(
     SEXP schema_name = R_NilValue,
     SEXP table_name = R_NilValue) {
   auto c = nanodbc::catalog(*(*p)->connection());
+  nanodbc::string_type col_s, tab_s, sch_s, cat_s;
+  if (column_name != R_NilValue)
+    col_s = utils::utf8_to_nanodbc(Rcpp::as<std::string>(column_name));
+  if (table_name != R_NilValue)
+    tab_s = utils::utf8_to_nanodbc(Rcpp::as<std::string>(table_name));
+  if (schema_name != R_NilValue)
+    sch_s = utils::utf8_to_nanodbc(Rcpp::as<std::string>(schema_name));
+  if (catalog_name != R_NilValue)
+    cat_s = utils::utf8_to_nanodbc(Rcpp::as<std::string>(catalog_name));
   auto tables = c.find_columns(
-      column_name == R_NilValue ? nullptr : Rcpp::as<const char*>(column_name),
-      table_name == R_NilValue ? nullptr : Rcpp::as<const char*>(table_name),
-      schema_name == R_NilValue ? nullptr : Rcpp::as<const char*>(schema_name),
-      catalog_name == R_NilValue ? nullptr
-                                 : Rcpp::as<const char*>(catalog_name));
+      column_name == R_NilValue ? nullptr : col_s.c_str(),
+      table_name == R_NilValue ? nullptr : tab_s.c_str(),
+      schema_name == R_NilValue ? nullptr : sch_s.c_str(),
+      catalog_name == R_NilValue ? nullptr : cat_s.c_str());
 
   std::vector<std::string> column_names;
   std::vector<std::string> table_names;
@@ -259,19 +277,19 @@ Rcpp::DataFrame connection_sql_columns(
   std::vector<long> ordinal_position;
 
   while (tables.next()) {
-    column_names.push_back(tables.column_name());
-    table_names.push_back(tables.table_name());
-    schema_names.push_back(tables.table_schema());
-    catalog_names.push_back(tables.table_catalog());
+    column_names.push_back(utils::nanodbc_to_utf8(tables.column_name()));
+    table_names.push_back(utils::nanodbc_to_utf8(tables.table_name()));
+    schema_names.push_back(utils::nanodbc_to_utf8(tables.table_schema()));
+    catalog_names.push_back(utils::nanodbc_to_utf8(tables.table_catalog()));
     data_type.push_back(tables.data_type());
-    type_name.push_back(tables.type_name());
+    type_name.push_back(utils::nanodbc_to_utf8(tables.type_name()));
     column_size.push_back(tables.column_size());
     buffer_length.push_back(tables.buffer_length());
     decimal_digits.push_back(tables.decimal_digits());
     numeric_precision_radix.push_back(tables.numeric_precision_radix());
     nullable.push_back(tables.nullable());
-    remarks.push_back(tables.remarks());
-    column_default.push_back(tables.column_default());
+    remarks.push_back(utils::nanodbc_to_utf8(tables.remarks()));
+    column_default.push_back(utils::nanodbc_to_utf8(tables.column_default()));
     sql_data_type.push_back(tables.sql_data_type());
     sql_datetime_subtype.push_back(tables.sql_datetime_subtype());
     char_octet_length.push_back(tables.char_octet_length());

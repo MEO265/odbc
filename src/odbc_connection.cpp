@@ -40,11 +40,10 @@ odbc_connection::odbc_connection(
       timezone_out_str_(timezone_out),
       bigint_mapping_(bigint_mapping),
       output_encoder_(nullptr),
-      column_name_encoder_(nullptr),
+      name_encoding_(name_encoding),
       interruptible_execution_(interruptible_execution) {
 
   output_encoder_ = std::make_shared<Iconv>(encoding, "UTF-8");
-  column_name_encoder_ = std::make_shared<Iconv>(name_encoding, "UTF-8");
   if (!cctz::load_time_zone(timezone, &timezone_)) {
     Rcpp::stop("Error loading time zone (%s)", timezone);
   }
@@ -60,7 +59,9 @@ odbc_connection::odbc_connection(
     std::list< std::shared_ptr< void > > buffer_context;
     utils::prepare_connection_attributes(
         timeout, r_attributes, attributes, buffer_context );
-    c_ = std::make_shared<nanodbc::connection>(connection_string, attributes);
+    auto conn_str = utils::utf8_to_nanodbc(connection_string);
+    c_ = std::make_shared<nanodbc::connection>();
+    c_->connect(conn_str, attributes);
   } catch (const nanodbc::database_error& e) {
     utils::raise_error(odbc_error(e, "", *output_encoder_));
   }
@@ -113,10 +114,12 @@ bool odbc_connection::get_data_any_order() const {
      * use empirical findings - we know this to be the case for the Microsoft
      * driver for SQL Server.
      */
-    std::string dbms = c_->get_info<std::string>(SQL_DBMS_NAME);
-    std::string driver = c_->get_info<std::string>(SQL_DRIVER_NAME);
+    auto dbms = utils::nanodbc_to_utf8(
+        c_->get_info<nanodbc::string_type>(SQL_DBMS_NAME));
+    auto driver = utils::nanodbc_to_utf8(
+        c_->get_info<nanodbc::string_type>(SQL_DRIVER_NAME));
     if (dbms == "Microsoft SQL Server" &&
-		    driver.find("msodbcsql") != std::string::npos) {
+                    driver.find("msodbcsql") != std::string::npos) {
       return false;
     }
     return true;
@@ -130,8 +133,6 @@ std::string odbc_connection::timezone_out_str() const {
   return timezone_out_str_;
 }
 const std::shared_ptr<Iconv> odbc_connection::output_encoder() const { return output_encoder_; }
-const std::shared_ptr<Iconv> odbc_connection::column_name_encoder() const { return column_name_encoder_; }
-
 bigint_map_t odbc_connection::get_bigint_mapping() const {
   return bigint_mapping_;
 }
