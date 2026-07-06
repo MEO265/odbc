@@ -10,9 +10,11 @@ NULL
 NULL
 
 OdbcResult <- function(connection, statement, params = NULL, immediate = FALSE) {
-  if (nzchar(connection@encoding)) {
-    statement <- enc2iconv(statement, connection@encoding)
-  }
+  # The statement is sent to the driver via the Unicode ("W") ODBC API, so we
+  # only need to ensure it is UTF-8 encoded; the C++ layer transcodes it to the
+  # driver's wide string type. This replaces the previous `enc2iconv()` step
+  # that re-encoded the statement to the connection's code page.
+  statement <- enc2utf8(statement)
   ptr <- new_result(
     p = connection@ptr,
     sql = statement, immediate = immediate
@@ -67,7 +69,14 @@ setMethod("dbFetch", "OdbcResult",
   function(res, n = -1, ...) {
     check_number_whole(n, min = -1, allow_infinite = TRUE)
     if (is.infinite(n)) n <- -1
-    result_fetch(res@ptr, n)
+    out <- result_fetch(res@ptr, n)
+    # Narrow (CHAR/VARCHAR) columns come back in the client's native encoding,
+    # while wide (NCHAR/NVARCHAR) columns are already UTF-8. Force every
+    # character column to UTF-8 so that all output is consistently UTF-8
+    # encoded. `enc2utf8()` is a no-op for values already marked as UTF-8.
+    is_char <- vapply(out, is.character, logical(1))
+    out[is_char] <- lapply(out[is_char], enc2utf8)
+    out
   }
 )
 

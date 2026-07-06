@@ -28,10 +28,17 @@ public:
     if (sql != "") {
       m += "\n<SQL> '" + sql + "'";
     }
+#ifdef NANODBC_USE_UNICODE
+    // In the wide ("W") build nanodbc already returns diagnostic messages as
+    // UTF-8, so we only mark the encoding and translate to native for R.
+    (void)output_encoder;
+    message = Rf_translateChar(Rf_mkCharCE(m.c_str(), CE_UTF8));
+#else
     // #432: [R] expects UTF-8 encoded strings but both nanodbc and sql are
     // encoded in the database encoding, which may differ from UTF-8
     message = Rf_translateChar(
         output_encoder.makeSEXP(m.c_str(), m.c_str() + m.length()));
+#endif
   }
   const char* what() const NANODBC_NOEXCEPT { return message.c_str(); }
 

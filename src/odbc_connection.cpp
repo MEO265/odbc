@@ -60,7 +60,11 @@ odbc_connection::odbc_connection(
     std::list< std::shared_ptr< void > > buffer_context;
     utils::prepare_connection_attributes(
         timeout, r_attributes, attributes, buffer_context );
-    c_ = std::make_shared<nanodbc::connection>(connection_string, attributes);
+    // Establish the connection using the wide ("W") ODBC API. The connection
+    // string arrives from [R] as UTF-8 and is transcoded to the nanodbc wide
+    // string_type before being handed to nanodbc.
+    c_ = std::make_shared<nanodbc::connection>(
+        utils::to_nanodbc_string(connection_string), attributes);
   } catch (const nanodbc::database_error& e) {
     utils::raise_error(odbc_error(e, "", *output_encoder_));
   }
@@ -113,8 +117,10 @@ bool odbc_connection::get_data_any_order() const {
      * use empirical findings - we know this to be the case for the Microsoft
      * driver for SQL Server.
      */
-    std::string dbms = c_->get_info<std::string>(SQL_DBMS_NAME);
-    std::string driver = c_->get_info<std::string>(SQL_DRIVER_NAME);
+    std::string dbms =
+        utils::from_nanodbc_string(c_->get_info<nanodbc::string_type>(SQL_DBMS_NAME));
+    std::string driver =
+        utils::from_nanodbc_string(c_->get_info<nanodbc::string_type>(SQL_DRIVER_NAME));
     if (dbms == "Microsoft SQL Server" &&
 		    driver.find("msodbcsql") != std::string::npos) {
       return false;

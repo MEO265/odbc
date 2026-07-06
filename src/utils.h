@@ -12,6 +12,41 @@
 
 namespace odbc {
 namespace utils {
+  /// \brief Convert a UTF-8 encoded [R] string into a `nanodbc::string_type`.
+  ///
+  /// When the package is built with `NANODBC_USE_UNICODE` (the ODBC "W" /
+  /// wide API), `nanodbc::string_type` is a wide string and the UTF-8 input is
+  /// transcoded to UTF-16/UCS-4 accordingly. Without that flag this is a
+  /// no-op that simply returns the input, so the same code compiles and
+  /// behaves identically in the narrow ("A") build.
+  ///
+  /// \param utf8 A UTF-8 encoded string (as produced by [R]).
+  /// \return The equivalent `nanodbc::string_type`.
+  nanodbc::string_type to_nanodbc_string(const std::string& utf8);
+
+  /// \brief Convert a `nanodbc::string_type` returned by nanodbc into a UTF-8
+  /// encoded `std::string` suitable for handing back to [R].
+  ///
+  /// In the unicode build this transcodes the wide string to UTF-8. In the
+  /// narrow build it is a no-op returning the input unchanged.
+  ///
+  /// \param str A `nanodbc::string_type` produced by nanodbc.
+  /// \return The equivalent UTF-8 encoded `std::string`.
+  std::string from_nanodbc_string(const nanodbc::string_type& str);
+
+  /// \brief Recover the raw single-byte representation of a string returned by
+  /// nanodbc for a narrow (`SQL_C_CHAR`) column.
+  ///
+  /// In the unicode build nanodbc widens the individual bytes of a bound
+  /// narrow column one-to-one into the wide `string_type`; this reverses that
+  /// widening so the original bytes can be re-encoded through the connection
+  /// encoder exactly as in the narrow build. In the narrow build it is a no-op.
+  ///
+  /// \param str A `nanodbc::string_type` produced by nanodbc for a narrow
+  ///            column.
+  /// \return The original bytes as a `std::string`.
+  std::string narrow_bytes(const nanodbc::string_type& str);
+
   /// \brief Prepare connection attributes
   ///
   /// Parse [R] named list of connection attributes and translate into
