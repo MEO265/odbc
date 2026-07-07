@@ -49,12 +49,11 @@ setMethod("show", "OdbcDriver",
 #'   takes precedence.
 #' @param timezone_out The time zone returned to R. If you want to display
 #'   datetime values in the local timezone, set to [Sys.timezone()].
-#' @param encoding `r lifecycle::badge("deprecated")` This argument is
-#'   deprecated and ignored. All character data is always exchanged with the
-#'   database as UTF-8, so no re-encoding is necessary. Strings are always
-#'   returned `UTF-8` encoded.
-#' @param name_encoding `r lifecycle::badge("deprecated")` This argument is
-#'   deprecated and ignored. Column names are always returned `UTF-8` encoded.
+#' @param encoding This argument is deprecated and ignored. All character
+#'   data is always exchanged with the database as UTF-8, so no re-encoding
+#'   is necessary. Strings are always returned `UTF-8` encoded.
+#' @param name_encoding This argument is deprecated and ignored. Column names
+#' are always returned `UTF-8` encoded.
 #' @param driver The ODBC driver name or a path to a driver. For currently
 #'   available options, see the `name` column of [odbcListDrivers()] output.
 #' @param server The server hostname. Some drivers use `Servername` as the name

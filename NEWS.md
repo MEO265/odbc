@@ -16,6 +16,12 @@
   `enc2iconv()` re-encoding of statements and bound values (to the
   connection `encoding`) is no longer necessary and has been removed.
 
+* `NANODBC_USE_UNICODE` requires `std::codecvt_utf8_utf16` and 
+  `std::u16string` for UTF-8 `<->` UTF-16 conversion. These C++11 features 
+  are buggy or incompletely implemented in older Windows toolchains (Rtools40, 
+  GCC 8.x). Only Rtools42 (from R 4.2.0) provides reliable support with 
+  GCC 10.3+ and the UCRT.
+
 # odbc 1.7.0
 
 ## Databricks

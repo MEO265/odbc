@@ -196,10 +196,9 @@ setMethod("sqlData", "OdbcConnection",
     is_object <- vapply(value, function(x) is.object(x) && !(is(x, "POSIXct") || is(x, "Date") || is_blob(x) || is(x, "difftime")), logical(1))
     value[is_object] <- lapply(value[is_object], as.character)
 
-    # All character values are sent to the driver as Unicode via the "W" ODBC
-    # API. Force every character column to UTF-8 here (regardless of its
-    # native/latin1/UTF-8 marking) so that the input is always well-defined
-    # UTF-8 before the C++ layer transcodes it to the driver's wide string type.
+    # The statement is sent to the driver via the Unicode ("W") ODBC API, so we
+    # only need to ensure it is UTF-8 encoded; the C++ layer transcodes it to the
+    # driver's wide string type.
     is_char <- vapply(value, is.character, logical(1))
     value[is_char] <- lapply(value[is_char], enc2utf8)
 
