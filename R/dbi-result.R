@@ -69,9 +69,9 @@ setMethod("dbFetch", "OdbcResult",
     check_number_whole(n, min = -1, allow_infinite = TRUE)
     if (is.infinite(n)) n <- -1
     out <- result_fetch(res@ptr, n)
-    # Narrow (CHAR/VARCHAR) columns come back in the client's native encoding,
-    # while wide (NCHAR/NVARCHAR) columns are already UTF-8. Force every
-    # character column to UTF-8 so that all output is consistently UTF-8.
+    # All character data is retrieved via the ODBC "W" (Unicode) API and is
+    # already tagged as UTF-8 by the C++ layer. This `enc2utf8()` is a cheap
+    # safety net that guarantees a consistent UTF-8 declared encoding.
     is_char <- vapply(out, is.character, logical(1))
     out[is_char] <- lapply(out[is_char], enc2utf8)
     out

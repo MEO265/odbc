@@ -3758,8 +3758,16 @@ private:
                 break;
             case SQL_CHAR:
             case SQL_VARCHAR:
-                col.ctype_ = SQL_C_CHAR;
-                col.clen_ = NBYTES(col.sqlsize_, SQLCHAR);
+                // package:odbc — retrieve *all* character data through the
+                // Unicode ("W") API by binding narrow CHAR/VARCHAR columns as
+                // SQL_C_WCHAR (just like NCHAR/NVARCHAR below). Any compliant
+                // ODBC driver transcodes from its own internal encoding to
+                // UTF-16 for us, so we no longer depend on the (lossy) client
+                // ANSI code page. nanodbc then converts UTF-16 -> UTF-8
+                // uniformly. This is driver-independent: it needs no knowledge
+                // of the DBMS/driver name or the column's server-side charset.
+                col.ctype_ = SQL_C_WCHAR;
+                col.clen_ = NBYTES(col.sqlsize_, SQLWCHAR);
                 if (col.sqlsize_ == 0)
                 {
                     col.clen_ = 0;
@@ -3781,7 +3789,9 @@ private:
                 col.clen_ = sizeof(timestampoffset);
                 break;
             case SQL_LONGVARCHAR:
-                col.ctype_ = SQL_C_CHAR;
+                // package:odbc — see the SQL_VARCHAR note above; long narrow
+                // text is likewise retrieved as Unicode via SQL_C_WCHAR.
+                col.ctype_ = SQL_C_WCHAR;
                 col.blob_ = true;
                 col.clen_ = 0;
                 break;

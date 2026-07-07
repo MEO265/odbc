@@ -26,7 +26,6 @@ using odbc::utils::raise_warning;
 using odbc::utils::raise_error;
 using odbc::utils::to_nanodbc_string;
 using odbc::utils::from_nanodbc_string;
-using odbc::utils::narrow_bytes;
 odbc_result::odbc_result(
     std::shared_ptr<odbc_connection> c, std::string sql, bool immediate)
     : c_(c),
@@ -888,11 +887,14 @@ std::vector<r_type> odbc_result::column_types(nanodbc::result const& r) {
     case SQL_CHAR:
     case SQL_VARCHAR:
     case SQL_LONGVARCHAR:
-      types.push_back(string_t);
-      break;
     case SQL_WCHAR:
     case SQL_WVARCHAR:
     case SQL_WLONGVARCHAR:
+      // All character data is now retrieved through the Unicode ("W") API:
+      // narrow CHAR/VARCHAR columns are bound as SQL_C_WCHAR in nanodbc's
+      // auto_bind() exactly like NCHAR/NVARCHAR, so every string arrives as
+      // UTF-16 and is transcoded to UTF-8. There is no longer a distinct
+      // "native encoding" narrow path, so treat them all uniformly.
       types.push_back(ustring_t);
       break;
     case SQL_BINARY:
@@ -971,10 +973,8 @@ Rcpp::List odbc_result::result_to_dataframe(nanodbc::result& r, int n_max) {
         assign_time(out, row, col, r);
         break;
       case string_t:
-        assign_string(out, row, col, r, CE_NATIVE);
-        break;
       case ustring_t:
-        assign_string(out, row, col, r, CE_UTF8);
+        assign_string(out, row, col, r);
         break;
       case logical_t:
         assign_logical(out, row, col, r);
@@ -1043,15 +1043,13 @@ void odbc_result::assign_logical(
 }
 
 
-// Character columns are retrieved from nanodbc as the wide `string_type` (the
-// package always uses the ODBC "W" API). The conversion back to bytes for [R]
-// depends on the column type: for the wide NCHAR/NVARCHAR types we transcode
-// UTF-16 to UTF-8 and tag CE_UTF8, while for CHAR/VARCHAR we recover the raw
-// client/native bytes and tag CE_NATIVE (R converts those to UTF-8 later in the
-// `dbFetch()` method). `encoding` selects between the two.
+// Character columns are always retrieved through the ODBC "W" API, so nanodbc
+// returns them as the wide `string_type` (UTF-16). We transcode UTF-16 -> UTF-8
+// via `from_nanodbc_string()` and tag the [R] string CE_UTF8. This is
+// driver-independent: whatever the server-side charset, the driver converts to
+// UTF-16 on retrieval, so we never have to guess the client's ANSI code page.
 void odbc_result::assign_string(
-    Rcpp::List& out, size_t row, short column, nanodbc::result& value,
-    cetype_t encoding) {
+    Rcpp::List& out, size_t row, short column, nanodbc::result& value) {
   SEXP res;
 
   if (value.is_null(column)) {
@@ -1061,9 +1059,8 @@ void odbc_result::assign_string(
     if (value.is_null(column)) {
       res = NA_STRING;
     } else {
-      std::string str =
-          (encoding == CE_UTF8) ? from_nanodbc_string(raw) : narrow_bytes(raw);
-      res = Rf_mkCharCE(str.c_str(), encoding);
+      std::string str = from_nanodbc_string(raw);
+      res = Rf_mkCharCE(str.c_str(), CE_UTF8);
     }
   }
   SET_STRING_ELT(out[column], row, res);

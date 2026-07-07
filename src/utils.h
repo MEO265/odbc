@@ -31,17 +31,6 @@ namespace utils {
   /// \return The equivalent UTF-8 encoded `std::string`.
   std::string from_nanodbc_string(const nanodbc::string_type& str);
 
-  /// \brief Recover the raw single-byte representation of a string returned by
-  /// nanodbc for a narrow (`SQL_C_CHAR`) column.
-  ///
-  /// In the wide ("W") build nanodbc widens the individual bytes of a narrow
-  /// column one-to-one into the wide `string_type`; this reverses that
-  /// widening so the original bytes can be handed back to [R] as native.
-  ///
-  /// \param str A `nanodbc::string_type` produced by nanodbc for a narrow
-  ///            column.
-  /// \return The original bytes as a `std::string`.
-  std::string narrow_bytes(const nanodbc::string_type& str);
 
   /// \brief Prepare connection attributes
   ///

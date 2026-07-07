@@ -45,18 +45,6 @@ namespace utils {
   }
 
 
-  std::string narrow_bytes(const nanodbc::string_type& str)
-  {
-    // In the wide ("W") build nanodbc widens the individual bytes of a narrow
-    // (SQL_C_CHAR) column one-to-one into the wide string_type; recover the
-    // original single-byte representation so it can be handed to R as native.
-    std::string out;
-    out.reserve(str.size());
-    for (auto const& c : str) {
-      out.push_back(static_cast<char>(c & 0xFF));
-    }
-    return out;
-  }
 
   std::shared_ptr< void > serialize_azure_token( const std::string& token )
   {

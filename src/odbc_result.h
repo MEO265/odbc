@@ -272,12 +272,12 @@ private:
   void assign_double(
       Rcpp::List& out, size_t row, short column, nanodbc::result& value);
 
-  // Character columns are handed back by nanodbc as a std::string that already
-  // holds the correct bytes; `encoding` selects how the [R] string is tagged
-  // (CE_NATIVE for CHAR/VARCHAR, CE_UTF8 for the wide NCHAR/NVARCHAR types).
+  // Character columns are always retrieved through the Unicode ("W") API, so
+  // nanodbc hands them back as the wide string_type (UTF-16). We transcode to
+  // UTF-8 and tag the [R] string CE_UTF8 uniformly, regardless of whether the
+  // server-side type was CHAR/VARCHAR or NCHAR/NVARCHAR.
   void assign_string(
-      Rcpp::List& out, size_t row, short column, nanodbc::result& value,
-      cetype_t encoding);
+      Rcpp::List& out, size_t row, short column, nanodbc::result& value);
 
   void assign_datetime(
       Rcpp::List& out, size_t row, short column, nanodbc::result& value);
