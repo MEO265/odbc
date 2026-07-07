@@ -1,5 +1,27 @@
 # odbc (development version)
 
+* The `encoding` and `name_encoding` arguments of `dbConnect()` are now
+  deprecated and ignored. All character data is now exchanged with the driver
+  as UTF-8 without a user-supplied encoding: character input is forced to UTF-8
+  in R (`sqlData()`), and character output is converted to UTF-8 in R
+  (`dbFetch()`). Narrow (`CHAR`/`VARCHAR`) columns are read from the driver in
+  the client's native encoding and then converted to UTF-8, while wide
+  (`NCHAR`/`NVARCHAR`) columns and column names are already UTF-8.
+
+* The package now connects and communicates with drivers using the
+  Unicode ("W") ODBC API (nanodbc is built with `NANODBC_USE_UNICODE`).
+  Connection strings, SQL statements, bound character parameters, column
+  names and catalog metadata are now transcoded between UTF-8 and the
+  driver's wide string type in C++. As a result, the previous
+  `enc2iconv()` re-encoding of statements and bound values (to the
+  connection `encoding`) is no longer necessary and has been removed.
+
+* `NANODBC_USE_UNICODE` requires `std::codecvt_utf8_utf16` and 
+  `std::u16string` for UTF-8 `<->` UTF-16 conversion. These C++11 features 
+  are buggy or incompletely implemented in older Windows toolchains (Rtools40, 
+  GCC 8.x). Only Rtools42 (from R 4.2.0) provides reliable support with 
+  GCC 10.3+ and the UCRT.
+
 # odbc 1.7.0
 
 ## Databricks

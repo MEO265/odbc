@@ -5,6 +5,8 @@
 #if !defined(_WIN32) && !defined(_WIN64)
 #include <signal.h>
 #endif
+#include <locale>
+#include <codecvt>
 
 #ifndef SQL_DRIVER_CONN_ATTR_BASE
     #define SQL_DRIVER_CONN_ATTR_BASE   0x00004000
@@ -15,6 +17,34 @@
 #define SQL_SF_CONN_ATTR_PRIV_KEY_PASSWORD (SQL_SF_CONN_ATTR_BASE + 4)
 namespace odbc {
 namespace utils {
+
+  nanodbc::string_type to_nanodbc_string(const std::string& utf8)
+  {
+    if (utf8.empty()) {
+      return nanodbc::string_type();
+    }
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    std::wstring_convert<NANODBC_CODECVT_TYPE<nanodbc::wide_char_t>, nanodbc::wide_char_t>
+        converter;
+    return converter.from_bytes(utf8);
+# pragma GCC diagnostic pop
+  }
+
+  std::string from_nanodbc_string(const nanodbc::string_type& str)
+  {
+    if (str.empty()) {
+      return std::string();
+    }
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    std::wstring_convert<NANODBC_CODECVT_TYPE<nanodbc::wide_char_t>, nanodbc::wide_char_t>
+        converter;
+    return converter.to_bytes(str);
+# pragma GCC diagnostic pop
+  }
+
+
 
   std::shared_ptr< void > serialize_azure_token( const std::string& token )
   {

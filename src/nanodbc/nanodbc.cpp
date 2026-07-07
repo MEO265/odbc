@@ -655,24 +655,33 @@ struct sql_ctype<double>
     static const SQLSMALLINT value = SQL_C_DOUBLE;
 };
 
+// package:odbc Backported from upstream nanodbc: specialize sql_ctype on the
+// concrete character/string types so the library also compiles in the unicode
+// ("W") build, where string_type is wide and sql_ctype<char> would otherwise
+// be undefined for the narrow SQL_C_CHAR read/bind paths. Narrow-build behavior
+// is unchanged (char/std::string -> SQL_C_CHAR).
 template <>
-struct sql_ctype<nanodbc::string_type::value_type>
+struct sql_ctype<char>
 {
-#ifdef NANODBC_USE_UNICODE
-    static const SQLSMALLINT value = SQL_C_WCHAR;
-#else
     static const SQLSMALLINT value = SQL_C_CHAR;
-#endif
 };
 
 template <>
-struct sql_ctype<nanodbc::string_type>
+struct sql_ctype<nanodbc::wide_char_t>
 {
-#ifdef NANODBC_USE_UNICODE
     static const SQLSMALLINT value = SQL_C_WCHAR;
-#else
+};
+
+template <>
+struct sql_ctype<std::string>
+{
     static const SQLSMALLINT value = SQL_C_CHAR;
-#endif
+};
+
+template <>
+struct sql_ctype<nanodbc::wide_string_type>
+{
+    static const SQLSMALLINT value = SQL_C_WCHAR;
 };
 
 template <>
@@ -932,7 +941,7 @@ public:
         }
     }
 
-    connection_impl(string const& connection_string, std::list<attribute> attributes)
+    connection_impl(string_type const& connection_string, std::list<attribute> attributes)
         : env_(nullptr)
         , dbc_(nullptr)
         , connected_(false)
@@ -1116,7 +1125,7 @@ public:
     }
 
     RETCODE
-    connect(string const& connection_string, long timeout, void* event_handle = nullptr)
+    connect(string_type const& connection_string, long timeout, void* event_handle = nullptr)
     {
         std::list<attribute> attributes;
         // Avoid to set the timeout to 0 (no timeout).
@@ -3749,8 +3758,16 @@ private:
                 break;
             case SQL_CHAR:
             case SQL_VARCHAR:
-                col.ctype_ = SQL_C_CHAR;
-                col.clen_ = NBYTES(col.sqlsize_, SQLCHAR);
+                // package:odbc — retrieve *all* character data through the
+                // Unicode ("W") API by binding narrow CHAR/VARCHAR columns as
+                // SQL_C_WCHAR (just like NCHAR/NVARCHAR below). Any compliant
+                // ODBC driver transcodes from its own internal encoding to
+                // UTF-16 for us, so we no longer depend on the (lossy) client
+                // ANSI code page. nanodbc then converts UTF-16 -> UTF-8
+                // uniformly. This is driver-independent: it needs no knowledge
+                // of the DBMS/driver name or the column's server-side charset.
+                col.ctype_ = SQL_C_WCHAR;
+                col.clen_ = NBYTES(col.sqlsize_, SQLWCHAR);
                 if (col.sqlsize_ == 0)
                 {
                     col.clen_ = 0;
@@ -3772,7 +3789,9 @@ private:
                 col.clen_ = sizeof(timestampoffset);
                 break;
             case SQL_LONGVARCHAR:
-                col.ctype_ = SQL_C_CHAR;
+                // package:odbc — see the SQL_VARCHAR note above; long narrow
+                // text is likewise retrieved as Unicode via SQL_C_WCHAR.
+                col.ctype_ = SQL_C_WCHAR;
                 col.blob_ = true;
                 col.clen_ = 0;
                 break;
@@ -6100,7 +6119,7 @@ bool result::is_bound(short column) const
     return impl_->is_bound(column);
 }
 
-bool result::is_bound(const string& column_name) const
+bool result::is_bound(const string_type& column_name) const
 {
     return impl_->is_bound(column_name);
 }
