@@ -5,10 +5,8 @@
 #if !defined(_WIN32) && !defined(_WIN64)
 #include <signal.h>
 #endif
-#ifdef NANODBC_USE_UNICODE
 #include <locale>
 #include <codecvt>
-#endif
 
 #ifndef SQL_DRIVER_CONN_ATTR_BASE
     #define SQL_DRIVER_CONN_ATTR_BASE   0x00004000
@@ -22,7 +20,6 @@ namespace utils {
 
   nanodbc::string_type to_nanodbc_string(const std::string& utf8)
   {
-#ifdef NANODBC_USE_UNICODE
     if (utf8.empty()) {
       return nanodbc::string_type();
     }
@@ -32,14 +29,10 @@ namespace utils {
         converter;
     return converter.from_bytes(utf8);
 # pragma GCC diagnostic pop
-#else
-    return utf8;
-#endif
   }
 
   std::string from_nanodbc_string(const nanodbc::string_type& str)
   {
-#ifdef NANODBC_USE_UNICODE
     if (str.empty()) {
       return std::string();
     }
@@ -49,23 +42,20 @@ namespace utils {
         converter;
     return converter.to_bytes(str);
 # pragma GCC diagnostic pop
-#else
-    return str;
-#endif
   }
+
 
   std::string narrow_bytes(const nanodbc::string_type& str)
   {
-#ifdef NANODBC_USE_UNICODE
+    // In the wide ("W") build nanodbc widens the individual bytes of a narrow
+    // (SQL_C_CHAR) column one-to-one into the wide string_type; recover the
+    // original single-byte representation so it can be handed to R as native.
     std::string out;
     out.reserve(str.size());
     for (auto const& c : str) {
       out.push_back(static_cast<char>(c & 0xFF));
     }
     return out;
-#else
-    return str;
-#endif
   }
 
   std::shared_ptr< void > serialize_azure_token( const std::string& token )

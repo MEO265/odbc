@@ -35,9 +35,7 @@ odbc_result::odbc_result(
       num_columns_(0),
       complete_(0),
       bound_(false),
-      immediate_(immediate),
-      output_encoder_(c->output_encoder()),
-      column_name_encoder_(c->column_name_encoder()) {
+      immediate_(immediate) {
 
   c_->cancel_current_result();
 
@@ -93,13 +91,13 @@ void odbc_result::execute() {
       // that we have encountered an error using an exception.
       // Main thread will do resource cleanup, and
       // raise the formatted [R] error.
-      throw odbc_error(e, sql_, *output_encoder_);
+      throw odbc_error(e, sql_);
     } else {
       // Executing on the main thread.  Raise the
       // formatted [R] errpr ourselves, and
       // do resource cleanup.
       c_->set_current_result(nullptr);
-      raise_error(odbc_error(e, sql_, *output_encoder_));
+      raise_error(odbc_error(e, sql_));
     }
   } catch (...) {
     if (!c_->interruptible_execution_) {
@@ -379,19 +377,14 @@ void odbc_result::bind_string(
       buffers.strings_[column].push_back("");
       continue;
     }
-#ifdef NANODBC_USE_UNICODE
     // In the wide ("W") build values are sent to the driver as Unicode. Force
     // the [R] string to UTF-8 (regardless of its native/latin1/UTF-8 marking)
     // so it can be transcoded to the wide string_type. This replaces the
     // former [R]-side `enc2iconv()` re-encoding step.
     const char* v = Rf_translateCharUTF8(value);
-#else
-    const char* v = CHAR(value);
-#endif
     buffers.strings_[column].push_back(v);
   }
 
-#ifdef NANODBC_USE_UNICODE
   // In the wide ("W") build nanodbc expects wide string_type values, so
   // transcode the UTF-8 parameter values before binding. This replaces the
   // former [R]-side `enc2iconv()` step: the strings are sent to the driver as
@@ -403,10 +396,6 @@ void odbc_result::bind_string(
   }
   obj.bind_strings(
       column, wide_strings, reinterpret_cast<bool*>(buffers.nulls_[column].data()));
-#else
-  obj.bind_strings(
-      column, buffers.strings_[column], reinterpret_cast<bool*>(buffers.nulls_[column].data()));
-#endif
 }
 
 template<typename T>
@@ -587,17 +576,9 @@ std::vector<std::string> odbc_result::column_names(nanodbc::result const& r) {
   names.reserve(num_columns_);
   for (short i = 0; i < num_columns_; ++i) {
     nanodbc::string_type name = r.column_name(i);
-#ifdef NANODBC_USE_UNICODE
     // In the wide ("W") build the driver returns column names already as
     // Unicode, so we only need to transcode from the wide string_type to UTF-8.
     names.push_back(from_nanodbc_string(name));
-#else
-    // Similar to the handling of string fields,
-    // convert to UTF-8 before returning to user ( if needed )
-    names.push_back(
-        column_name_encoder_->makeString(name.c_str(), name.c_str() + name.length())
-    );
-#endif
   }
   return names;
 }
@@ -990,10 +971,10 @@ Rcpp::List odbc_result::result_to_dataframe(nanodbc::result& r, int n_max) {
         assign_time(out, row, col, r);
         break;
       case string_t:
-        assign_string(out, row, col, r);
+        assign_string(out, row, col, r, CE_NATIVE);
         break;
       case ustring_t:
-        assign_ustring(out, row, col, r);
+        assign_string(out, row, col, r, CE_UTF8);
         break;
       case logical_t:
         assign_logical(out, row, col, r);
@@ -1062,45 +1043,27 @@ void odbc_result::assign_logical(
 }
 
 
-// Narrow character columns (CHAR/VARCHAR) are retrieved from the driver as
-// SQL_C_CHAR, i.e. as bytes in the client's native/locale code page. Recover
-// those raw bytes and hand them to R marked as *native* encoded. The actual
-// conversion to UTF-8 happens in R (see the `dbFetch()` method), keeping
-// encoding conversion out of C++ and removing any dependency on a connection
-// `encoding`.
+// Character columns are retrieved from nanodbc as the wide `string_type` (the
+// package always uses the ODBC "W" API). The conversion back to bytes for [R]
+// depends on the column type: for the wide NCHAR/NVARCHAR types we transcode
+// UTF-16 to UTF-8 and tag CE_UTF8, while for CHAR/VARCHAR we recover the raw
+// client/native bytes and tag CE_NATIVE (R converts those to UTF-8 later in the
+// `dbFetch()` method). `encoding` selects between the two.
 void odbc_result::assign_string(
-    Rcpp::List& out, size_t row, short column, nanodbc::result& value) {
+    Rcpp::List& out, size_t row, short column, nanodbc::result& value,
+    cetype_t encoding) {
   SEXP res;
 
   if (value.is_null(column)) {
     res = NA_STRING;
   } else {
-    auto str = narrow_bytes(value.get<nanodbc::string_type>(column));
+    nanodbc::string_type raw = value.get<nanodbc::string_type>(column);
     if (value.is_null(column)) {
       res = NA_STRING;
     } else {
-      res = Rf_mkCharCE(str.c_str(), CE_NATIVE);
-    }
-  }
-  SET_STRING_ELT(out[column], row, res);
-}
-
-// unicode strings are converted to UTF-8 by nanodbc, so we just need to
-// mark the encoding.
-void odbc_result::assign_ustring(
-    Rcpp::List& out, size_t row, short column, nanodbc::result& value) {
-  SEXP res;
-
-  if (value.is_null(column)) {
-    res = NA_STRING;
-  } else {
-    // `from_nanodbc_string()` transcodes the wide string_type to UTF-8 in the
-    // "W" build; in the narrow build nanodbc has already produced UTF-8.
-    auto str = from_nanodbc_string(value.get<nanodbc::string_type>(column));
-    if (value.is_null(column)) {
-      res = NA_STRING;
-    } else {
-      res = Rf_mkCharCE(str.c_str(), CE_UTF8);
+      std::string str =
+          (encoding == CE_UTF8) ? from_nanodbc_string(raw) : narrow_bytes(raw);
+      res = Rf_mkCharCE(str.c_str(), encoding);
     }
   }
   SET_STRING_ELT(out[column], row, res);
