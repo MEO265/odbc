@@ -1,12 +1,11 @@
 #include <memory>
 #include <string>
 #include <future>
+#include <cstdint>
 #include "utils.h"
 #if !defined(_WIN32) && !defined(_WIN64)
 #include <signal.h>
 #endif
-#include <locale>
-#include <codecvt>
 
 #ifndef SQL_DRIVER_CONN_ATTR_BASE
     #define SQL_DRIVER_CONN_ATTR_BASE   0x00004000
@@ -18,30 +17,137 @@
 namespace odbc {
 namespace utils {
 
+namespace {
+
+  // UTF-8 <-> UTF-16 transcoding used to bridge [R]'s UTF-8 strings and the
+  // wide `nanodbc::string_type` (the ODBC "W" API). This is hand-rolled instead
+  // of using std::wstring_convert / std::codecvt_utf8_utf16 because those facets
+  // are deprecated since C++17 (warnings on libc++/libstdc++/MSVC, removed in
+  // C++26) AND are buggy in several standard libraries: under MinGW/Rtools they
+  // could corrupt the heap (crash code 0xC0000374) on malformed input. This
+  // single implementation runs identically on every OS and never reads or
+  // writes out of bounds: any invalid byte or unpaired surrogate is replaced
+  // with U+FFFD (the Unicode REPLACEMENT CHARACTER).
+  //
+  // The package is always built with NANODBC_USE_UNICODE and without
+  // NANODBC_USE_IODBC_WIDE_STRINGS, so nanodbc's wide char is 16-bit (UTF-16)
+  // on every platform. Fail loudly if that assumption is ever broken.
+  static_assert(sizeof(nanodbc::wide_char_t) == 2,
+                "utils.cpp assumes a 16-bit (UTF-16) nanodbc::wide_char_t");
+
+  constexpr char32_t kReplacementChar = 0xFFFD;
+
+  // Append a single Unicode code point to a UTF-16 string.
+  inline void append_utf16(nanodbc::string_type& out, char32_t cp)
+  {
+    if (cp < 0x10000) {
+      out.push_back(static_cast<nanodbc::wide_char_t>(cp));
+    } else {
+      cp -= 0x10000;
+      out.push_back(static_cast<nanodbc::wide_char_t>(0xD800 + (cp >> 10)));
+      out.push_back(static_cast<nanodbc::wide_char_t>(0xDC00 + (cp & 0x3FF)));
+    }
+  }
+
+  // Append a single Unicode code point to a UTF-8 string.
+  inline void append_utf8(std::string& out, char32_t cp)
+  {
+    if (cp < 0x80) {
+      out.push_back(static_cast<char>(cp));
+    } else if (cp < 0x800) {
+      out.push_back(static_cast<char>(0xC0 | (cp >> 6)));
+      out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    } else if (cp < 0x10000) {
+      out.push_back(static_cast<char>(0xE0 | (cp >> 12)));
+      out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+      out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    } else {
+      out.push_back(static_cast<char>(0xF0 | (cp >> 18)));
+      out.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+      out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+      out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    }
+  }
+
+  nanodbc::string_type utf8_to_wide(const std::string& utf8)
+  {
+    nanodbc::string_type out;
+    out.reserve(utf8.size());
+    const std::size_t n = utf8.size();
+    std::size_t i = 0;
+    while (i < n) {
+      const unsigned char lead = static_cast<unsigned char>(utf8[i]);
+      char32_t cp;
+      std::size_t extra;
+      char32_t min_cp;
+      if (lead < 0x80) {
+        cp = lead; extra = 0; min_cp = 0x0;
+      } else if ((lead & 0xE0) == 0xC0) {
+        cp = lead & 0x1F; extra = 1; min_cp = 0x80;
+      } else if ((lead & 0xF0) == 0xE0) {
+        cp = lead & 0x0F; extra = 2; min_cp = 0x800;
+      } else if ((lead & 0xF8) == 0xF0) {
+        cp = lead & 0x07; extra = 3; min_cp = 0x10000;
+      } else {
+        // Invalid lead byte: emit replacement and resync on the next byte.
+        append_utf16(out, kReplacementChar); ++i; continue;
+      }
+      if (i + extra >= n) {
+        append_utf16(out, kReplacementChar); ++i; continue;
+      }
+      bool ok = true;
+      for (std::size_t k = 1; k <= extra; ++k) {
+        const unsigned char cont = static_cast<unsigned char>(utf8[i + k]);
+        if ((cont & 0xC0) != 0x80) { ok = false; break; }
+        cp = (cp << 6) | (cont & 0x3F);
+      }
+      // Reject truncated, overlong, out-of-range and surrogate encodings.
+      if (!ok || cp < min_cp || cp > 0x10FFFF ||
+          (cp >= 0xD800 && cp <= 0xDFFF)) {
+        append_utf16(out, kReplacementChar); ++i; continue;
+      }
+      append_utf16(out, cp);
+      i += extra + 1;
+    }
+    return out;
+  }
+
+  std::string wide_to_utf8(const nanodbc::string_type& str)
+  {
+    std::string out;
+    out.reserve(str.size() + str.size() / 2);
+    const std::size_t n = str.size();
+    for (std::size_t i = 0; i < n; ++i) {
+      char32_t cp = static_cast<char16_t>(str[i]);
+      if (cp >= 0xD800 && cp <= 0xDBFF) {
+        // High surrogate: must be followed by a low surrogate.
+        char32_t lo = (i + 1 < n) ? static_cast<char16_t>(str[i + 1]) : 0;
+        if (lo >= 0xDC00 && lo <= 0xDFFF) {
+          cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+          ++i;
+        } else {
+          cp = kReplacementChar;
+        }
+      } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
+        // Unpaired low surrogate.
+        cp = kReplacementChar;
+      }
+      append_utf8(out, cp);
+    }
+    return out;
+  }
+
+
+} // anonymous namespace
+
   nanodbc::string_type to_nanodbc_string(const std::string& utf8)
   {
-    if (utf8.empty()) {
-      return nanodbc::string_type();
-    }
-# pragma GCC diagnostic push
-# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-    std::wstring_convert<NANODBC_CODECVT_TYPE<nanodbc::wide_char_t>, nanodbc::wide_char_t>
-        converter;
-    return converter.from_bytes(utf8);
-# pragma GCC diagnostic pop
+    return utf8.empty() ? nanodbc::string_type() : utf8_to_wide(utf8);
   }
 
   std::string from_nanodbc_string(const nanodbc::string_type& str)
   {
-    if (str.empty()) {
-      return std::string();
-    }
-# pragma GCC diagnostic push
-# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-    std::wstring_convert<NANODBC_CODECVT_TYPE<nanodbc::wide_char_t>, nanodbc::wide_char_t>
-        converter;
-    return converter.to_bytes(str);
-# pragma GCC diagnostic pop
+    return str.empty() ? std::string() : wide_to_utf8(str);
   }
 
 
@@ -115,7 +221,15 @@ namespace utils {
   void run_interruptible(const std::function<void()>& exec_fn, const std::function<void()>& cancel_fn,
                          const std::function<void()>& cleanup_fn)
   {
-    std::exception_ptr eptr;
+    // The worker thread records any exception it encounters into `*eptr`. This
+    // storage MUST outlive the worker thread under all circumstances, even if
+    // the main thread's stack unwinds while the worker is still running. We
+    // therefore heap-allocate it and capture the shared_ptr *by value* into the
+    // worker lambda, so the worker always holds a live reference to the storage
+    // regardless of what happens to this stack frame. For the same reason the
+    // execution functor is *copied* into the worker rather than referenced.
+    auto eptr = std::make_shared<std::exception_ptr>(nullptr);
+    auto exec_copy = exec_fn;
 #if !defined(_WIN32) && !defined(_WIN64)
     sigset_t set, old_set;
     sigemptyset(&set);
@@ -127,31 +241,51 @@ namespace utils {
       raise_warning("Unexpected behavior when creating execution thread.  Signals to interrupt execution may not be caught.");
     }
 #endif
-    auto future = std::async(std::launch::async, [&exec_fn, &eptr]() {
+    auto future = std::async(std::launch::async, [exec_copy, eptr]() {
       try {
-        exec_fn();
+        exec_copy();
       } catch (...) {
-        eptr = std::current_exception();
+        *eptr = std::current_exception();
       }
       return;
     });
 #if !defined(_WIN32) && !defined(_WIN64)
     pthread_sigmask(SIG_SETMASK, &old_set, NULL);
 #endif
+    // Wait for the worker to finish, polling for a user interrupt once a
+    // second. On interrupt we signal cancellation exactly once and then keep
+    // waiting: we must NOT surface anything to [R] (which may unwind the main
+    // thread's stack) while the worker thread is still alive and touching
+    // shared ODBC/nanodbc state. Doing so previously left the worker writing
+    // into a destroyed `eptr` / accessing a half-torn-down statement.
+    bool cancelled = false;
     std::future_status status;
     do {
       status = future.wait_for(std::chrono::seconds(1));
-      if (status != std::future_status::ready) {
-        try { Rcpp::checkUserInterrupt(); }
-        catch (const Rcpp::internal::InterruptedException& e) {
-          raise_message("Caught user interrupt, attempting a clean exit...");
+      if (status != std::future_status::ready && !cancelled) {
+        try {
+          Rcpp::checkUserInterrupt();
+        } catch (const Rcpp::internal::InterruptedException& e) {
           cancel_fn();
-        } catch (...) { throw; }
+          cancelled = true;
+        } catch (...) {
+          // Any other exception here would unwind past the still-running
+          // worker. Signal cancellation and keep waiting for the worker to
+          // finish before allowing the stack to unwind.
+          cancel_fn();
+          cancelled = true;
+        }
       }
     } while (status != std::future_status::ready);
-    if (eptr) {
+
+    // The worker thread has now completed (future is ready), so it is finally
+    // safe to call back into [R].
+    if (cancelled) {
+      raise_message("Caught user interrupt, attempting a clean exit...");
+    }
+    if (*eptr) {
       // An exception was thrown in the thread
-      try { cleanup_fn(); std::rethrow_exception(eptr); }
+      try { cleanup_fn(); std::rethrow_exception(*eptr); }
       catch (const odbc_error& e) { raise_error(e); }
       catch (...) { raise_message("Unknown exception while executing"); throw; };
     }
