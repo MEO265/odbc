@@ -28,7 +28,18 @@
       ! ODBC failed with error 00000 from [unixODBC][Driver Manager].
       x Data source name not found and no default driver specified
       i See `?odbc::odbcListDataSources()` to learn more.
-      i From 'nanodbc/nanodbc.cpp:1193'.
+      i From 'nanodbc/nanodbc.cpp:1184'.
+
+---
+
+    Code
+      dbExecute(con, "SELECT * FROM boopbopbopbeep")
+    Condition
+      Error in `dbExecute()`:
+      ! ODBC failed with error 00000 from [SQLite].
+      x no such table: boopbopbopbeep (1)
+      * <SQL> 'SELECT * FROM boopbopbopbeep'
+      i From 'nanodbc/nanodbc.cpp:1802'.
 
 # rethrow_database_error() errors well when parse_database_error() fails
 
@@ -109,6 +120,22 @@
     Condition
       Error:
       ! `parse_database_error()` will not {be able to parse this}, but it should still be successfully rethrown as-is.
+
+# check_row.names()
+
+    Code
+      dbWriteTable(con, "boopery", data.frame(bop = 1), row.names = c("no", "way"))
+    Condition
+      Error in `dbWriteTable()`:
+      ! `row.names` must be `NULL`, `TRUE`, `FALSE`, `NA`, or a single string, not a character vector.
+
+# check_field.types()
+
+    Code
+      dbWriteTable(con, "boopery", data.frame(bop = 1), field.types = "numeric")
+    Condition
+      Error in `dbWriteTable()`:
+      ! `field.types` must be `NULL` or a named vector of field types, not a string.
 
 # check_attributes()
 
