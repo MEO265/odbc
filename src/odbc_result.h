@@ -22,18 +22,25 @@ public:
       const nanodbc::database_error& e,
       const std::string& sql)
       : Rcpp::exception("", false) {
-    std::string m = std::string(e.what());
+    message = std::string(e.what());
     if (sql != "") {
-      m += "\n<SQL> '" + sql + "'";
+      message += "\n<SQL> '" + sql + "'";
     }
-    // nanodbc returns diagnostic messages from the wide ("W") ODBC API as
-    // UTF-8, so we only mark the encoding and translate to native for R.
-    message = Rf_translateChar(Rf_mkCharCE(m.c_str(), CE_UTF8));
+    // IMPORTANT: do NOT call any R C API here (e.g. Rf_mkCharCE /
+    // Rf_translateChar). With `interruptible = TRUE`, odbc_result::execute()
+    // runs on a worker thread and `throw`s -- i.e. constructs -- this exception
+    // off the main thread. R's C API is single-threaded; touching it here (it
+    // mutates the global string cache and allocates on R's heap) corrupts R's
+    // internal state and surfaces later as an access violation during garbage
+    // collection / interpreter shutdown (Windows exit code 0xC0000005).
+    // The message is left as UTF-8 (that is how nanodbc's "W" API returns it)
+    // and is encoded for R on the main thread in utils::raise_error().
   }
   const char* what() const NANODBC_NOEXCEPT { return message.c_str(); }
 
 private:
-  // #432: must be native encoded, as R expects native encoded chars for error msg
+  // UTF-8 encoded message. Encoding for R happens on the main thread; see
+  // utils::raise_error(const odbc_error&).
   std::string message;
 };
 

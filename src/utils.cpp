@@ -221,43 +221,55 @@ namespace {
   void run_interruptible(const std::function<void()>& exec_fn, const std::function<void()>& cancel_fn,
                          const std::function<void()>& cleanup_fn)
   {
-    // The worker thread records any exception it encounters into `*eptr`. This
-    // storage MUST outlive the worker thread under all circumstances, even if
-    // the main thread's stack unwinds while the worker is still running. We
-    // therefore heap-allocate it and capture the shared_ptr *by value* into the
-    // worker lambda, so the worker always holds a live reference to the storage
-    // regardless of what happens to this stack frame. For the same reason the
-    // execution functor is *copied* into the worker rather than referenced.
-    auto eptr = std::make_shared<std::exception_ptr>(nullptr);
+    std::exception_ptr eptr;
+
+#if defined(_WIN32) || defined(_WIN64)
+    // Windows: execute inline on the R main thread -- do NOT offload to a worker
+    // thread.
+    //
+    // Running the ODBC query off the main thread was the root cause of a family
+    // of intermittent, non-deterministic crashes seen ONLY with
+    // `interruptible = TRUE` on Windows (exit codes 0xC0000005 / 0xC0000374 /
+    // 0xC0000409). The crashes persisted regardless of HOW the worker thread was
+    // created (std::async/winpthreads as well as a native Win32 thread) and
+    // regardless of its stack size -- which pins the cause on the ODBC stack
+    // (psqlODBC + the Windows Driver Manager) not tolerating a statement being
+    // prepared/executed on one thread and then fetched from another. Inline
+    // execution -- exactly what `interruptible = FALSE` does, which is verified
+    // rock solid -- avoids the cross-thread handle use entirely.
+    //
+    // Trade-off: a long-running query cannot be interrupted mid-flight on
+    // Windows (R's Ctrl-C is still handled between operations). This is
+    // acceptable given R's interrupt delivery on Windows already differs from
+    // POSIX signals, and stability trumps mid-query cancellation.
+    (void)cancel_fn;
+    try {
+      exec_fn();
+    } catch (...) {
+      eptr = std::current_exception();
+    }
+#else
+    // POSIX: execute on a std::async worker, masking SIGINT there so the
+    // interrupt is delivered to (and handled on) the main thread. The exception
+    // storage is heap-allocated and captured by value so it always outlives the
+    // worker, and the callable is copied into the worker rather than referenced.
+    auto eptr_holder = std::make_shared<std::exception_ptr>(nullptr);
     auto exec_copy = exec_fn;
-#if !defined(_WIN32) && !defined(_WIN64)
     sigset_t set, old_set;
     sigemptyset(&set);
     sigaddset(&set, SIGINT);
-    int rc = pthread_sigmask(SIG_BLOCK, &set, &old_set);
-    if ( rc != 0 )
-    {
+    if (pthread_sigmask(SIG_BLOCK, &set, &old_set) != 0) {
       // Unable to properly mask SIGINT from execution thread
       raise_warning("Unexpected behavior when creating execution thread.  Signals to interrupt execution may not be caught.");
     }
-#endif
-    auto future = std::async(std::launch::async, [exec_copy, eptr]() {
+    auto future = std::async(std::launch::async, [exec_copy, eptr_holder]() {
       try {
         exec_copy();
       } catch (...) {
-        *eptr = std::current_exception();
+        *eptr_holder = std::current_exception();
       }
-      return;
     });
-#if !defined(_WIN32) && !defined(_WIN64)
     pthread_sigmask(SIG_SETMASK, &old_set, NULL);
-#endif
-    // Wait for the worker to finish, polling for a user interrupt once a
-    // second. On interrupt we signal cancellation exactly once and then keep
-    // waiting: we must NOT surface anything to [R] (which may unwind the main
-    // thread's stack) while the worker thread is still alive and touching
-    // shared ODBC/nanodbc state. Doing so previously left the worker writing
-    // into a destroyed `eptr` / accessing a half-torn-down statement.
     bool cancelled = false;
     std::future_status status;
     do {
@@ -265,27 +277,21 @@ namespace {
       if (status != std::future_status::ready && !cancelled) {
         try {
           Rcpp::checkUserInterrupt();
-        } catch (const Rcpp::internal::InterruptedException& e) {
-          cancel_fn();
-          cancelled = true;
         } catch (...) {
-          // Any other exception here would unwind past the still-running
-          // worker. Signal cancellation and keep waiting for the worker to
-          // finish before allowing the stack to unwind.
           cancel_fn();
           cancelled = true;
         }
       }
     } while (status != std::future_status::ready);
-
-    // The worker thread has now completed (future is ready), so it is finally
-    // safe to call back into [R].
     if (cancelled) {
       raise_message("Caught user interrupt, attempting a clean exit...");
     }
-    if (*eptr) {
-      // An exception was thrown in the thread
-      try { cleanup_fn(); std::rethrow_exception(*eptr); }
+    eptr = *eptr_holder;
+#endif
+
+    if (eptr) {
+      // An exception was thrown while executing.
+      try { cleanup_fn(); std::rethrow_exception(eptr); }
       catch (const odbc_error& e) { raise_error(e); }
       catch (...) { raise_message("Unknown exception while executing"); throw; };
     }
@@ -318,7 +324,13 @@ namespace {
   void raise_error(const odbc_error& e) {
     Rcpp::Environment pkg = Rcpp::Environment::namespace_env("odbc");
     Rcpp::Function r_method = pkg["rethrow_database_error"];
-    r_method(e.what());
+    // `e.what()` is UTF-8. The odbc_error constructor deliberately performs no
+    // R C API calls (it may run on the interruptible worker thread). We do the
+    // UTF-8 -> native translation here, where we are guaranteed to be on the R
+    // main thread. This reproduces the previous message bytes exactly, but
+    // thread-safely.
+    std::string native = Rf_translateChar(Rf_mkCharCE(e.what(), CE_UTF8));
+    r_method(native);
   }
 
 }}
