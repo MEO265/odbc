@@ -368,7 +368,18 @@ inline void convert(const std::string& in, wide_string_type& out)
     auto size_needed =
         MultiByteToWideChar(CP_UTF8, 0, &in[0], static_cast<int>(in.size()), nullptr, 0);
     out.resize(size_needed);
-    MultiByteToWideChar(CP_UTF8, 0, &in[0], static_cast<int>(in.size()), &out[0], size_needed);
+    // package:odbc — `out` is `wide_string_type` (std::u16string), so `&out[0]`
+    // is a `char16_t*`. `MultiByteToWideChar` expects `LPWSTR` (`wchar_t*`),
+    // and under Rtools/MinGW `char16_t` and `wchar_t` are distinct types (both
+    // 16-bit on Windows), so the implicit conversion is a hard compile error.
+    // reinterpret_cast bridges them, mirroring the WideCharToMultiByte path.
+    MultiByteToWideChar(
+        CP_UTF8,
+        0,
+        &in[0],
+        static_cast<int>(in.size()),
+        reinterpret_cast<wchar_t*>(&out[0]),
+        size_needed);
 #else
 # pragma GCC diagnostic push
 # pragma GCC diagnostic ignored "-Wdeprecated-declarations"
