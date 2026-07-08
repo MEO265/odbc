@@ -22,6 +22,16 @@
   GCC 8.x). Only Rtools42 (from R 4.2.0) provides reliable support with 
   GCC 10.3+ and the UCRT.
 
+* Interruptible query execution (the `interruptible` argument to `dbConnect()`
+  and the `odbc.interruptible` option) is now only available on Linux and
+  macOS. On **Windows**, queries are always executed inline on the main thread
+  and can no longer be interrupted mid-flight (Ctrl-C is still handled between
+  operations). Running queries on a background thread---which interruption
+  requires---caused intermittent, non-deterministic crashes with some Windows
+  ODBC drivers, so the threaded path has been disabled on Windows in favour of
+  stable inline execution. Setting `interruptible = TRUE` on Windows is
+  accepted but has no effect.
+
 # odbc 1.7.0
 
 ## Databricks
