@@ -17,10 +17,12 @@ OdbcConnection <- function(
     dbms.name = NULL,
     attributes = NULL,
     interruptible = getOption("odbc.interruptible", interactive()),
+    nanodbc_utf32 = FALSE,
     .connection_string = NULL,
     call = caller_env(2)
 ) {
   check_attributes(attributes, call = call)
+  check_bool(nanodbc_utf32)
 
   args <- compact(list(...))
   check_args(args)
@@ -44,7 +46,8 @@ OdbcConnection <- function(
       bigint = bigint,
       timeout = timeout,
       r_attributes = attributes,
-      interruptible_execution = interruptible
+      interruptible_execution = interruptible,
+      nanodbc_utf32 = nanodbc_utf32
     ),
     error = function(cnd) {
       check_quoting(args)

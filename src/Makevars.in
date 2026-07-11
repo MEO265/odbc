@@ -4,7 +4,7 @@ PKG_CPPFLAGS=@PKG_CFLAGS@
 PKG_CXXFLAGS=-Icctz/include -Inanodbc -I. -DBUILD_REAL_64_BIT_MODE -DNANODBC_ODBC_VERSION=SQL_OV_ODBC3 -DNANODBC_USE_UNICODE $(CXXPICFLAGS)
 PKG_LIBS=@PKG_LIBS@ -Lcctz -lcctz
 
-OBJECTS = odbc_result.o connection.o nanodbc.o result.o odbc_connection.o RcppExports.o utils.o
+OBJECTS = odbc_result.o connection.o nanodbc.o result.o odbc_connection.o RcppExports.o utils.o nanodbc_utf32.o odbc_result_utf32.o connection_utf32.o result_utf32.o odbc_connection_utf32.o utils_utf32.o RcppExports_utf32.o
 
 all: $(SHLIB)
 
@@ -22,6 +22,25 @@ $(MAKE) libcctz.a CC="$(CC)" CXX="$(CXX)" CXXFLAGS="$(CXXFLAGS)" AR="$(AR)" ARFL
 
 nanodbc.o: nanodbc/nanodbc.cpp
 	$(CXX) $(ALL_CPPFLAGS) $(ALL_CXXFLAGS) -DNANODBC_OVERALLOCATE_CHAR -c $< -o $@
+
+UTF32_RENAMES=-Dnanodbc=nanodbc_utf32 -Dodbc=odbc_utf32 -Dlist_drivers_=list_drivers_utf32_ -Dlist_data_sources_=list_data_sources_utf32_ -Dodbc_connect=odbc_connect_utf32 -Dhas_result=has_result_utf32 -Dconnection_info=connection_info_utf32 -Dconnection_quote=connection_quote_utf32 -Dconnection_release=connection_release_utf32 -Dconnection_begin=connection_begin_utf32 -Dconnection_commit=connection_commit_utf32 -Dconnection_rollback=connection_rollback_utf32 -Dconnection_valid=connection_valid_utf32 -Dconnection_sql_tables=connection_sql_tables_utf32 -Dconnection_sql_catalogs=connection_sql_catalogs_utf32 -Dconnection_sql_schemas=connection_sql_schemas_utf32 -Dconnection_sql_table_types=connection_sql_table_types_utf32 -Dconnection_sql_columns=connection_sql_columns_utf32 -DtransactionLevels=transactionLevels_utf32 -Dset_transaction_isolation=set_transaction_isolation_utf32 -Dbigint_mappings=bigint_mappings_utf32 -Dresult_release=result_release_utf32 -Dresult_active=result_active_utf32 -Dresult_completed=result_completed_utf32 -Dnew_result=new_result_utf32 -Dresult_fetch=result_fetch_utf32 -Dresult_column_info=result_column_info_utf32 -Dresult_bind=result_bind_utf32 -Dresult_insert_dataframe=result_insert_dataframe_utf32 -Dresult_describe_parameters=result_describe_parameters_utf32 -Dresult_rows_affected=result_rows_affected_utf32 -Dresult_row_count=result_row_count_utf32 -Dcolumn_types=column_types_utf32 -DR_init_odbc=R_init_odbc_utf32_dummy -D_odbc_list_drivers_=_odbc_list_drivers__utf32 -D_odbc_list_data_sources_=_odbc_list_data_sources__utf32 -D_odbc_odbc_connect=_odbc_odbc_connect_utf32 -D_odbc_has_result=_odbc_has_result_utf32 -D_odbc_connection_info=_odbc_connection_info_utf32 -D_odbc_connection_quote=_odbc_connection_quote_utf32 -D_odbc_connection_release=_odbc_connection_release_utf32 -D_odbc_connection_begin=_odbc_connection_begin_utf32 -D_odbc_connection_commit=_odbc_connection_commit_utf32 -D_odbc_connection_rollback=_odbc_connection_rollback_utf32 -D_odbc_connection_valid=_odbc_connection_valid_utf32 -D_odbc_connection_sql_tables=_odbc_connection_sql_tables_utf32 -D_odbc_connection_sql_catalogs=_odbc_connection_sql_catalogs_utf32 -D_odbc_connection_sql_schemas=_odbc_connection_sql_schemas_utf32 -D_odbc_connection_sql_table_types=_odbc_connection_sql_table_types_utf32 -D_odbc_connection_sql_columns=_odbc_connection_sql_columns_utf32 -D_odbc_transactionLevels=_odbc_transactionLevels_utf32 -D_odbc_set_transaction_isolation=_odbc_set_transaction_isolation_utf32 -D_odbc_bigint_mappings=_odbc_bigint_mappings_utf32 -D_odbc_result_release=_odbc_result_release_utf32 -D_odbc_result_active=_odbc_result_active_utf32 -D_odbc_result_completed=_odbc_result_completed_utf32 -D_odbc_new_result=_odbc_new_result_utf32 -D_odbc_result_fetch=_odbc_result_fetch_utf32 -D_odbc_result_column_info=_odbc_result_column_info_utf32 -D_odbc_result_bind=_odbc_result_bind_utf32 -D_odbc_result_insert_dataframe=_odbc_result_insert_dataframe_utf32 -D_odbc_result_describe_parameters=_odbc_result_describe_parameters_utf32 -D_odbc_result_rows_affected=_odbc_result_rows_affected_utf32 -D_odbc_result_row_count=_odbc_result_row_count_utf32 -D_odbc_column_types=_odbc_column_types_utf32
+UTF32_CXXFLAGS=$(ALL_CXXFLAGS) -DNANODBC_USE_IODBC_WIDE_STRINGS $(UTF32_RENAMES)
+
+nanodbc_utf32.o: nanodbc/nanodbc.cpp
+	$(CXX) $(ALL_CPPFLAGS) $(UTF32_CXXFLAGS) -DNANODBC_OVERALLOCATE_CHAR -c $< -o $@
+
+odbc_result_utf32.o: odbc_result.cpp
+	$(CXX) $(ALL_CPPFLAGS) $(UTF32_CXXFLAGS) -c $< -o $@
+connection_utf32.o: connection.cpp
+	$(CXX) $(ALL_CPPFLAGS) $(UTF32_CXXFLAGS) -c $< -o $@
+result_utf32.o: result.cpp
+	$(CXX) $(ALL_CPPFLAGS) $(UTF32_CXXFLAGS) -c $< -o $@
+odbc_connection_utf32.o: odbc_connection.cpp
+	$(CXX) $(ALL_CPPFLAGS) $(UTF32_CXXFLAGS) -c $< -o $@
+utils_utf32.o: utils.cpp
+	$(CXX) $(ALL_CPPFLAGS) $(UTF32_CXXFLAGS) -c $< -o $@
+RcppExports_utf32.o: RcppExports.cpp
+	$(CXX) $(ALL_CPPFLAGS) $(UTF32_CXXFLAGS) -c $< -o $@
 
 clean:
 	(cd cctz; $(MAKE) clean)
