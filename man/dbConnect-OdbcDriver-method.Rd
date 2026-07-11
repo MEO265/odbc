@@ -26,6 +26,7 @@ odbc()
   dbms.name = NULL,
   attributes = NULL,
   interruptible = getOption("odbc.interruptible", interactive()),
+  nanodbc_utf32 = FALSE,
   .connection_string = NULL
 )
 }
@@ -105,6 +106,10 @@ Otherwise, they block.  Defaults to \code{TRUE} in interactive sessions, and
 \code{FALSE} otherwise.  It can be set explicitly either by manipulating this
 argument, or by setting the global option \code{odbc.interruptible}.}
 
+\item{nanodbc_utf32}{Logical. If \code{TRUE}, use the UTF-32/iODBC nanodbc
+backend for this connection. If \code{FALSE}, use the default UTF-16 backend.
+This is selected per connection only; there is no global option fallback.}
+
 \item{.connection_string}{A complete connection string, useful if you are
 copy pasting it from another source. If this argument is used, any
 additional arguments will be appended to this string.}
@@ -183,4 +188,3 @@ provides further context on drivers and driver managers.
 is a thorough resource on the ODBC interface.
 }
 }
-

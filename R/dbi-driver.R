@@ -76,6 +76,9 @@ setMethod("show", "OdbcDriver",
 #'   Otherwise, they block.  Defaults to `TRUE` in interactive sessions, and
 #'   `FALSE` otherwise.  It can be set explicitly either by manipulating this
 #'   argument, or by setting the global option `odbc.interruptible`.
+#' @param nanodbc_utf32 Logical. If `TRUE`, use the UTF-32/iODBC nanodbc
+#'   backend for this connection. If `FALSE`, use the default UTF-16 backend.
+#'   This is selected per connection only; there is no global option fallback.
 #' @param ... Additional ODBC keywords. These will be joined with the other
 #'   arguments to form the final connection string.
 #'
@@ -179,6 +182,7 @@ setMethod("dbConnect", "OdbcDriver",
       dbms.name = NULL,
       attributes = NULL,
       interruptible = getOption("odbc.interruptible", interactive()),
+      nanodbc_utf32 = FALSE,
       .connection_string = NULL) {
     check_string(dsn, allow_null = TRUE)
     check_string(timezone)
@@ -192,6 +196,7 @@ setMethod("dbConnect", "OdbcDriver",
     check_string(pwd, allow_null = TRUE)
     check_string(dbms.name, allow_null = TRUE)
     check_bool(interruptible)
+    check_bool(nanodbc_utf32)
 
     if (!is_windows() && length(locate_install_unixodbc()) == 0) {
       error_install_unixodbc(call = caller_env())
@@ -212,6 +217,7 @@ setMethod("dbConnect", "OdbcDriver",
       dbms.name = dbms.name,
       attributes = attributes,
       interruptible = interruptible,
+      nanodbc_utf32 = nanodbc_utf32,
       .connection_string = .connection_string
     )
 

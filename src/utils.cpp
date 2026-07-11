@@ -19,7 +19,7 @@ namespace utils {
 
 namespace {
 
-  // UTF-8 <-> UTF-16 transcoding used to bridge [R]'s UTF-8 strings and the
+  // UTF-8 <-> nanodbc wide-string transcoding used to bridge [R]'s UTF-8 strings and the
   // wide `nanodbc::string_type` (the ODBC "W" API). This is hand-rolled instead
   // of using std::wstring_convert / std::codecvt_utf8_utf16 because those facets
   // are deprecated since C++17 (warnings on libc++/libstdc++/MSVC, removed in
@@ -29,18 +29,19 @@ namespace {
   // writes out of bounds: any invalid byte or unpaired surrogate is replaced
   // with U+FFFD (the Unicode REPLACEMENT CHARACTER).
   //
-  // The package is always built with NANODBC_USE_UNICODE and without
-  // NANODBC_USE_IODBC_WIDE_STRINGS, so nanodbc's wide char is 16-bit (UTF-16)
-  // on every platform. Fail loudly if that assumption is ever broken.
-  static_assert(sizeof(nanodbc::wide_char_t) == 2,
-                "utils.cpp assumes a 16-bit (UTF-16) nanodbc::wide_char_t");
+  // The package builds two nanodbc variants: UTF-16 (2-byte wide chars) and
+  // UTF-32/iODBC (4-byte wide chars). Fail loudly for unsupported ABIs.
+  static_assert(sizeof(nanodbc::wide_char_t) == 2 || sizeof(nanodbc::wide_char_t) == 4,
+                "utils.cpp assumes a 16-bit or 32-bit nanodbc::wide_char_t");
 
   constexpr char32_t kReplacementChar = 0xFFFD;
 
-  // Append a single Unicode code point to a UTF-16 string.
-  inline void append_utf16(nanodbc::string_type& out, char32_t cp)
+  // Append a single Unicode code point to the active nanodbc wide string.
+  inline void append_wide(nanodbc::string_type& out, char32_t cp)
   {
-    if (cp < 0x10000) {
+    if (sizeof(nanodbc::wide_char_t) == 4) {
+      out.push_back(static_cast<nanodbc::wide_char_t>(cp));
+    } else if (cp < 0x10000) {
       out.push_back(static_cast<nanodbc::wide_char_t>(cp));
     } else {
       cp -= 0x10000;
@@ -90,10 +91,10 @@ namespace {
         cp = lead & 0x07; extra = 3; min_cp = 0x10000;
       } else {
         // Invalid lead byte: emit replacement and resync on the next byte.
-        append_utf16(out, kReplacementChar); ++i; continue;
+        append_wide(out, kReplacementChar); ++i; continue;
       }
       if (i + extra >= n) {
-        append_utf16(out, kReplacementChar); ++i; continue;
+        append_wide(out, kReplacementChar); ++i; continue;
       }
       bool ok = true;
       for (std::size_t k = 1; k <= extra; ++k) {
@@ -104,9 +105,9 @@ namespace {
       // Reject truncated, overlong, out-of-range and surrogate encodings.
       if (!ok || cp < min_cp || cp > 0x10FFFF ||
           (cp >= 0xD800 && cp <= 0xDFFF)) {
-        append_utf16(out, kReplacementChar); ++i; continue;
+        append_wide(out, kReplacementChar); ++i; continue;
       }
-      append_utf16(out, cp);
+      append_wide(out, cp);
       i += extra + 1;
     }
     return out;
@@ -118,7 +119,11 @@ namespace {
     out.reserve(str.size() + str.size() / 2);
     const std::size_t n = str.size();
     for (std::size_t i = 0; i < n; ++i) {
-      char32_t cp = static_cast<char16_t>(str[i]);
+      char32_t cp = static_cast<nanodbc::wide_char_t>(str[i]);
+      if (sizeof(nanodbc::wide_char_t) == 4) {
+        append_utf8(out, cp <= 0x10FFFF ? cp : kReplacementChar);
+        continue;
+      }
       if (cp >= 0xD800 && cp <= 0xDBFF) {
         // High surrogate: must be followed by a low surrogate.
         char32_t lo = (i + 1 < n) ? static_cast<char16_t>(str[i + 1]) : 0;
