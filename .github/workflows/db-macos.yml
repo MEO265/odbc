@@ -54,24 +54,6 @@ jobs:
 
       - uses: r-lib/actions/setup-r@v2
 
-      - name: Set up Docker for SQL Server
-        if: matrix.database == 'SQLServer'
-        uses: docker/setup-docker-action@v5
-        env:
-          LIMA_START_ARGS: --cpus 3 --memory 8
-
-      - name: Start SQL Server
-        if: matrix.database == 'SQLServer'
-        run: |
-          password="Ci_$(openssl rand -hex 16)!9"
-          echo "::add-mask::$password"
-          docker run -d --name sqlserver \
-            -e ACCEPT_EULA=Y -e MSSQL_PID=Developer \
-            -e MSSQL_SA_PASSWORD="$password" \
-            -p 127.0.0.1:1433:1433 \
-            mcr.microsoft.com/mssql/server:2022-latest
-          echo "ODBC_CS_SQLSERVER=Driver={ODBC Driver 18 for SQL Server};Server=127.0.0.1,1433;UID=sa;PWD=$password;Encrypt=yes;TrustServerCertificate=yes" >> "$GITHUB_ENV"
-
       - name: Install MySQL
         if: matrix.database == 'MySQL'
         uses: ankane/setup-mysql@v1
@@ -93,9 +75,7 @@ jobs:
           case "$TEST_DATABASE" in
             SQLServer)
               brew tap microsoft/mssql-release
-              if brew commands | grep -qx trust; then
-                brew trust microsoft/mssql-release
-              fi
+              brew trust microsoft/mssql-release
               HOMEBREW_ACCEPT_EULA=Y brew install msodbcsql18
               driver_name="ODBC Driver 18 for SQL Server"
               driver_path="$(brew --prefix msodbcsql18)/lib/libmsodbcsql.18.dylib"
@@ -132,6 +112,24 @@ jobs:
           EOF
           odbcinst -j
           odbcinst -q -d
+
+      - name: Set up Docker for SQL Server
+        if: matrix.database == 'SQLServer'
+        uses: docker/setup-docker-action@v5
+        env:
+          LIMA_START_ARGS: --cpus 3 --memory 8
+
+      - name: Start SQL Server
+        if: matrix.database == 'SQLServer'
+        run: |
+          password="Ci_$(openssl rand -hex 16)!9"
+          echo "::add-mask::$password"
+          docker run -d --name sqlserver \
+            -e ACCEPT_EULA=Y -e MSSQL_PID=Developer \
+            -e MSSQL_SA_PASSWORD="$password" \
+            -p 127.0.0.1:1433:1433 \
+            mcr.microsoft.com/mssql/server:2022-latest
+          echo "ODBC_CS_SQLSERVER=Driver={ODBC Driver 18 for SQL Server};Server=127.0.0.1,1433;UID=sa;PWD=$password;Encrypt=yes;TrustServerCertificate=yes" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         uses: r-lib/actions/setup-r-dependencies@v2
