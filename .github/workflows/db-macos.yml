@@ -111,7 +111,7 @@ jobs:
               brew install psqlodbc
               driver_name="PostgreSQL Unicode"
               driver_path="$(brew --prefix psqlodbc)/lib/psqlodbcw.so"
-              echo "ODBC_CS_POSTGRES=Driver={$driver_name};Server=127.0.0.1;Port=5432;BoolsAsChar=0;LFConversion=0;Database=test;UID=postgres;PWD=" >> "$GITHUB_ENV"
+              echo "ODBC_CS_POSTGRES=Driver={$driver_name};Server=localhost;Port=5432;BoolsAsChar=0;LFConversion=0;Database=test;UID=postgres;PWD=" >> "$GITHUB_ENV"
               ;;
             SQLite)
               brew install sqliteodbc
